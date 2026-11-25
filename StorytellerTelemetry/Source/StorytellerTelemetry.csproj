@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- RimWorld 1.7 ships its own .NET 10 runtime; compile against those assemblies so a .NET 9 SDK can build it. -->
+    <TargetFramework>net9.0</TargetFramework>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>StorytellerTelemetry</AssemblyName>
+    <RootNamespace>StorytellerTelemetry</RootNamespace>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+    <DebugType>none</DebugType>
+    <OutputPath>..\1.7\Assemblies\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RimWorldDir>$(MSBuildThisFileDirectory)..\..\..\</RimWorldDir>
+    <WorkshopDir>$(RimWorldDir)..\..\workshop\content\294100\</WorkshopDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(RimWorldDir)System.Private.CoreLib.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)System.Runtime.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)System.Collections.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)System.Linq.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)netstandard.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)Assembly-CSharp.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)UnityStubs.dll" Private="false" />
+    <Reference Include="$(RimWorldDir)Waylith.dll" Private="false" />
+    <Reference Include="$(WorkshopDir)2009463077\1.7\Assemblies\0Harmony.dll" Private="false" />
+  </ItemGroup>
+</Project>

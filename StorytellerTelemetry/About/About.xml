@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Storyteller Telemetry</name>
+  <author>Cookis</author>
+  <packageId>Cookis.StorytellerTelemetry</packageId>
+  <supportedVersions>
+    <li>1.7</li>
+  </supportedVersions>
+  <description>Records what the storyteller does and how the colony copes, as JSON Lines files, for training an adaptive difficulty model.
+
+Logged: every incident (with resolved raid points, faction, strategy, arrival mode and raid composition), periodic colony snapshots (wealth, threat points and their factors, colonists, defenses, resources, hostiles), pawn downed/death/kidnap events, mental breaks, and per-fight "engagement" summaries.
+
+Changes nothing about gameplay. Safe to add to or remove from an existing save.
+
+Output: [RimWorld save data folder]/StorytellerTelemetry/</description>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+  </loadAfter>
+</ModMetaData>

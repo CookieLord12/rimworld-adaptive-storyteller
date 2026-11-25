@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telemetry Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --line: #dde1e7; --text: #1b1f24; --muted: #5d6673;
+  --accent: #2f6fde; --accent-soft: #e3ecfb; --good: #2f9e5f; --warn: #d9822b; --bad: #d64545;
+  --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 2px 8px rgba(15, 23, 42, .05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --panel-2: #1e232b; --line: #2a313b; --text: #e6e9ee; --muted: #9aa4b2;
+    --accent: #6ea0ff; --accent-soft: #1d2b45; --good: #4cc38a; --warn: #f0a04b; --bad: #f2555a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --panel-2: #1e232b; --line: #2a313b; --text: #e6e9ee; --muted: #9aa4b2;
+  --accent: #6ea0ff; --accent-soft: #1d2b45; --good: #4cc38a; --warn: #f0a04b; --bad: #f2555a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, select, input { font: inherit; color: inherit; }
+.num, td.n { font-variant-numeric: tabular-nums; }
+
+.topbar { position: sticky; top: 0; z-index: 20; }
+header.top {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 650; letter-spacing: .2px; margin-right: 6px; white-space: nowrap; }
+.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.ctrl { display: flex; align-items: center; gap: 6px; }
+.ctrl label { color: var(--muted); font-size: 12px; }
+select, input[type=search], input[type=number] {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 320px;
+}
+.btn {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 11px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.spacer { flex: 1; }
+
+nav.tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav.tabs button {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; cursor: pointer; color: var(--muted); white-space: nowrap;
+}
+nav.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+
+main { padding: 16px; max-width: 1600px; margin: 0 auto; }
+section.tab { display: none; }
+section.tab.on { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 14px; margin-bottom: 14px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; font-weight: 620; }
+.card h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.hint { color: var(--muted); font-size: 12.5px; }
+.grid { display: grid; gap: 14px; }
+.grid > * { min-width: 0; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--panel-2); border-radius: 8px; padding: 9px 11px; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.stat .v { font-size: 20px; font-weight: 620; font-variant-numeric: tabular-nums; }
+.stat .s { color: var(--muted); font-size: 12px; }
+
+.readout { position: sticky; top: var(--topbar-h, 0px); z-index: 5; box-shadow: 0 0 0 6px var(--panel); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; padding: 8px 10px; background: var(--panel-2); border-radius: 8px; min-height: 36px; margin-bottom: 8px; }
+.readout b { font-weight: 600; }
+.readout span { white-space: nowrap; }
+.readout span.hint { white-space: normal; }
+
+.tablewrap { overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 8px; }
+table.t { border-collapse: collapse; width: 100%; font-size: 12.8px; }
+table.t th, table.t td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.t th { position: sticky; top: 0; background: var(--panel-2); cursor: pointer; user-select: none; font-weight: 600; z-index: 1; }
+table.t th.n, table.t td.n { text-align: right; }
+table.t tbody tr { cursor: pointer; }
+table.t tbody tr:hover { background: var(--accent-soft); }
+table.t tbody tr.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+td.wrap { white-space: normal; min-width: 220px; }
+
+.chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; margin: 0 3px 2px 0; color: #fff; }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; background: var(--panel-2); border: 1px solid var(--line); margin: 0 3px 3px 0; }
+.score { display: inline-block; min-width: 22px; text-align: center; border-radius: 5px; color: #fff; font-weight: 700; padding: 0 5px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.filters .pill { cursor: pointer; }
+.filters .pill.off { opacity: .4; }
+
+#empty { max-width: 760px; margin: 48px auto; text-align: center; }
+#empty .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 40px 24px; background: var(--panel); }
+#empty .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+#empty code { background: var(--panel-2); padding: 2px 6px; border-radius: 5px; font-size: 12.5px; word-break: break-all; }
+#empty .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 18px 0 8px; }
+body.dragging::after { content: "Drop .jsonl files or a telemetry folder"; position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; background: color-mix(in srgb, var(--bg) 80%, transparent); border: 3px dashed var(--accent); z-index: 100; }
+
+#progress { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; box-shadow: var(--shadow); z-index: 60; display: none; min-width: 320px; }
+#progress .bar { height: 6px; background: var(--panel-2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+#progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+#inspector { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0, 0, 0, .15); transform: translateX(105%); transition: transform .18s ease; z-index: 50; display: flex; flex-direction: column; }
+#inspector.on { transform: none; }
+#inspector .head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+#inspector .head h2 { font-size: 15px; margin: 0; flex: 1; }
+#inspector .body { overflow: auto; padding: 12px 14px 40px; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 12.8px; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+pre.json { background: var(--panel-2); border-radius: 8px; padding: 10px; font-size: 11.5px; overflow: auto; max-height: 520px; white-space: pre-wrap; word-break: break-all; }
+details summary { cursor: pointer; color: var(--muted); margin: 10px 0 6px; }
+
+.skill { display: inline-block; width: 22px; text-align: center; font-size: 11px; border-radius: 3px; margin-right: 1px; }
+.plot { width: 100%; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; z-index: 90; font-size: 13px; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend-row i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+@media (max-width: 720px) {
+  main { padding: 10px 16px; }
+  .g2, .g3 { grid-template-columns: 1fr; }
+  header.top { padding: 8px 16px; }
+  select { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="topbar" id="topbar">
+<header class="top">
+  <div class="brand">Telemetry Viewer <small>Storyteller Telemetry</small></div>
+  <div class="ctrl" id="ctlRun" hidden><label for="selRun">Run</label><select id="selRun"></select></div>
+  <div class="ctrl" id="ctlView" hidden><label for="selView">Timeline</label><select id="selView"></select></div>
+  <div class="ctrl" id="ctlMap" hidden><label for="selMap">Map</label><select id="selMap"></select></div>
+  <div class="spacer"></div>
+  <button class="btn" id="btnFiles">Add files</button>
+  <button class="btn" id="btnFolder">Add folder</button>
+  <button class="btn" id="btnTheme" title="Switch light / dark">Theme</button>
+  <input type="file" id="inFiles" accept=".jsonl" multiple hidden>
+  <input type="file" id="inFolder" webkitdirectory multiple hidden>
+</header>
+<nav class="tabs" id="tabs" hidden>
+  <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="crises">Crises &amp; fights</button>
+  <button data-tab="incidents">Incidents</button>
+  <button data-tab="storyteller">Storyteller</button>
+  <button data-tab="colony">Colony</button>
+  <button data-tab="log">Event log</button>
+</nav>
+</div>
+
+<div id="empty">
+  <div class="drop" id="drop">
+    <h1 style="font-size:22px;margin:0 0 8px">Load telemetry</h1>
+    <p class="hint" style="font-size:14px">Drop <b>.jsonl</b> session files or the whole <b>StorytellerTelemetry</b> folder here.<br>Everything stays in this browser tab; nothing is uploaded.</p>
+    <div class="row">
+      <button class="btn primary" id="btnFolder2">Choose telemetry folder</button>
+      <button class="btn" id="btnFiles2">Choose files</button>
+    </div>
+    <p class="hint">Default location:<br><code>%USERPROFILE%\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\StorytellerTelemetry</code><br>(paste it into the folder dialog's address bar)</p>
+  </div>
+</div>
+
+<main id="app" hidden>
+  <section class="tab on" id="tab-overview">
+    <div class="card"><div class="stats" id="ovStats"></div><div class="hint" id="ovNotes" style="margin-top:8px"></div></div>
+    <div class="card">
+      <h2>Timeline</h2>
+      <div class="readout" id="readout"><span class="hint">Hover the chart to read the colony state; click a point or event for details. Drag to zoom, double-click to reset.</span></div>
+      <div id="tl" class="plot"></div>
+      <div class="legend-row" id="tlLegend"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-crises">
+    <div class="grid g3">
+      <div class="card"><h2>Ratings</h2><div id="crRatings" class="plot"></div></div>
+      <div class="card"><h2>Rating vs draft intensity</h2><div id="crScatter" class="plot"></div><div class="hint">Draft intensity is a heuristic from casualties, losses, mood drop and recovery time. Compare it with your ratings to tune it into a training label.</div></div>
+      <div class="card"><h2>Crisis factors</h2><div id="crFactors" class="plot"></div></div>
+    </div>
+    <div class="card" id="crLegacy" hidden><p class="hint" style="margin:0">This timeline was recorded before crisis tracking existed (schema below 4). Ratings were given per fight; see <b>Fights</b> below.</p></div>
+    <div class="card">
+      <h2>Crises</h2>
+      <div class="filters"><input type="search" id="crSearch" placeholder="Filter (factor, incident...)"><button class="btn" id="crCsv">Export CSV</button><span class="hint" id="crCount"></span></div>
+      <div class="tablewrap" id="crTable"></div>
+    </div>
+    <div class="card" id="crDetail" hidden></div>
+    <div class="card">
+      <h2>Fights</h2>
+      <div class="filters"><button class="btn" id="fiCsv">Export CSV</button><span class="hint" id="fiCount"></span></div>
+      <div class="tablewrap" id="fiTable"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-incidents">
+    <div class="grid g2">
+      <div class="card"><h2>Incidents over time</h2><div id="inTime" class="plot"></div></div>
+      <div class="card"><h2>Threat points vs outcome</h2><div id="inOutcome" class="plot"></div><div class="hint">Each threat incident linked to a crisis: x = raid points used, y = draft intensity of that crisis, colour = your rating.</div></div>
+    </div>
+    <div class="card">
+      <h2>Incidents</h2>
+      <div class="filters">
+        <input type="search" id="inSearch" placeholder="Filter (def, faction, source...)">
+        <select id="inCat"><option value="">All categories</option></select>
+        <label class="hint"><input type="checkbox" id="inThreat"> Threats only</label>
+        <button class="btn" id="inCsv">Export CSV</button>
+        <span class="hint" id="inCount"></span>
+      </div>
+      <div class="tablewrap" id="inTable"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-storyteller">
+    <div class="card"><h2>What the storyteller fired, by category</h2><div id="stStack" class="plot"></div></div>
+    <div class="grid g2">
+      <div class="card">
+        <h2>Decisions</h2>
+        <div class="hint" style="margin-bottom:8px">Each time a storyteller component fired something: the incidents it could have picked, and their weights. Share = chosen weight / total weight in its category.</div>
+        <div class="tablewrap" id="stTable"></div>
+      </div>
+      <div class="card"><h2 id="stDecTitle">Candidates</h2><div id="stDec" class="plot"></div><div class="hint">Select a decision to see what else was possible.</div></div>
+    </div>
+    <div class="card"><h2>Rejected incidents</h2><div class="hint" style="margin-bottom:8px">Incidents the storyteller picked that could not fire.</div><div id="stRejected"></div></div>
+  </section>
+
+  <section class="tab" id="tab-colony">
+    <div class="card">
+      <div class="filters">
+        <button class="btn" id="coPrev">&larr;</button>
+        <input type="range" id="coSlider" min="0" max="0" value="0" style="flex:1;min-width:200px">
+        <button class="btn" id="coNext">&rarr;</button>
+        <span id="coWhen" class="num"></span>
+      </div>
+      <div class="hint">Full colony state from the detailed snapshots (taken every in-game hour and around incidents and crises).</div>
+    </div>
+    <div id="coBody"></div>
+  </section>
+
+  <section class="tab" id="tab-log">
+    <div class="card">
+      <h2>Event log</h2>
+      <div class="filters" id="lgTypes"></div>
+      <div class="filters"><input type="search" id="lgSearch" placeholder="Search inside records"><span class="hint" id="lgCount"></span></div>
+      <div class="tablewrap" id="lgTable" style="max-height:680px"></div>
+    </div>
+  </section>
+</main>
+
+<aside id="inspector" aria-label="Details">
+  <div class="head"><h2 id="inTitle">Details</h2><button class="btn" id="inClose">Close</button></div>
+  <div class="body" id="inBody"></div>
+</aside>
+<div id="progress"><div id="progText">Loading…</div><div class="bar"><i id="progBar"></i></div></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- constants
+
+const CAT_COL = {
+  ThreatBig: "#e5484d", ThreatSmall: "#f76b15", DiseaseHuman: "#8e4ec6", DiseaseAnimal: "#ab4aba",
+  Misc: "#3b82f6", FactionArrival: "#30a46c", OrbitalVisitor: "#12a594", GiveQuest: "#e2a300",
+  ShipChunkDrop: "#a18072", Special: "#d6409f", AllyAssistance: "#46a758", RaidBeacon: "#c2410c"
+};
+const FACTOR_COL = {
+  combat: "#e5484d", internal_conflict: "#d6409f", fire: "#f76b15", disease: "#8e4ec6",
+  starvation: "#a18072", temperature: "#0ea5e9", colonist_death: "#6e56cf"
+};
+const FACTOR_PRIORITY = ["colonist_death", "internal_conflict", "fire", "combat", "disease", "starvation", "temperature"];
+const SCORE_COL = [null, "#2f9e5f", "#7cb342", "#e2a300", "#f76b15", "#e5484d"];
+const SKILLS = ["Shooting", "Melee", "Construction", "Mining", "Cooking", "Plants", "Animals", "Crafting", "Artistic", "Medicine", "Social", "Intellectual"];
+const TICKS_PER_DAY = 60000, TICKS_PER_HOUR = 2500;
+
+const S = { runs: new Map(), fileKeys: new Set(), run: null, view: null, M: null, map: null, tab: "overview", uid: 0, sel: {} };
+
+// ---------------------------------------------------------------- helpers
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const isNum = v => typeof v === "number" && isFinite(v);
+function fmt(v, dp = 0) {
+  if (!isNum(v)) return v == null ? "–" : String(v);
+  if (Math.abs(v) >= 10000) return Math.round(v).toLocaleString("en-US");
+  return v.toFixed(dp);
+}
+const pct = v => isNum(v) ? Math.round(v * 100) + "%" : "–";
+const day = d => isNum(d) ? "day " + d.toFixed(1) : "–";
+const hours = t => isNum(t) ? (t / TICKS_PER_HOUR).toFixed(t < 25000 ? 1 : 0) + " h" : "–";
+const ticksDays = t => isNum(t) && t >= 0 ? (t / TICKS_PER_DAY).toFixed(2) + " d" : (t === -1 ? "not reached" : "–");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const chip = (txt, col) => `<span class="chip" style="background:${col}">${esc(String(txt).replace(/_/g, " "))}</span>`;
+const factorChips = fs => (fs || []).map(f => chip(f, FACTOR_COL[f] || "#777")).join("");
+const scoreBadge = r => !r ? "" : r.skipped ? '<span class="pill">skipped</span>' : `<span class="score" style="background:${SCORE_COL[r.score] || "#777"}">${r.score}</span>${r.ended_run ? ' <span class="pill" title="This ended my run">run over</span>' : ""}`;
+const sleep = () => new Promise(r => setTimeout(r));
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3500); }
+function primaryFactor(fs) { for (const f of FACTOR_PRIORITY) if ((fs || []).includes(f)) return f; return (fs || [])[0]; }
+function bisect(arr, x, key) { let lo = 0, hi = arr.length - 1; if (hi < 0) return -1; while (lo < hi) { const m = (lo + hi) >> 1; if (key(arr[m]) < x) lo = m + 1; else hi = m; } if (lo > 0 && Math.abs(key(arr[lo - 1]) - x) < Math.abs(key(arr[lo]) - x)) lo--; return lo; }
+
+function plotTheme(extra = {}) {
+  const text = css("--text"), muted = css("--muted"), line = css("--line");
+  const ax = { gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: { color: muted }, title: { font: { color: muted } } };
+  return Object.assign({
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: text, family: "system-ui, Segoe UI, sans-serif", size: 12 },
+    margin: { l: 52, r: 18, t: 10, b: 40 }, showlegend: false,
+    hoverlabel: { bgcolor: css("--panel"), bordercolor: line, font: { color: text } },
+    xaxis: Object.assign({}, ax), yaxis: Object.assign({}, ax), _ax: ax
+  }, extra);
+}
+const PCFG = { displaylogo: false, responsive: true, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] };
+function plot(el, data, layout) {
+  if (typeof Plotly === "undefined") { el.innerHTML = '<p class="hint">Charts need the Plotly library, which loads from the internet. Check your connection and reload.</p>'; return; }
+  delete layout._ax;
+  Plotly.react(el, data, layout, PCFG);
+}
+
+// generic sortable table
+function table(el, cols, rows, opts = {}) {
+  const st = el._st || (el._st = { key: opts.sort || null, dir: opts.dir || -1 });
+  let data = rows.slice();
+  if (st.key) {
+    const c = cols.find(c => c.key === st.key);
+    const val = c && (c.sort || c.val || (r => r[c.key]));
+    if (val) data.sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * st.dir; });
+  }
+  const max = opts.max || 3000;
+  const head = cols.map(c => `<th class="${c.num ? "n" : ""}" data-k="${c.key}" title="${esc(c.title || "")}">${esc(c.label)}${st.key === c.key ? (st.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
+  const body = data.slice(0, max).map((r, i) => `<tr data-i="${rows.indexOf(r)}" class="${opts.selected && opts.selected(r) ? "sel" : ""}">` + cols.map(c => {
+    const v = c.html ? c.html(r) : esc(c.fmt ? c.fmt(c.val ? c.val(r) : r[c.key], r) : (c.val ? c.val(r) : r[c.key]) ?? "–");
+    return `<td class="${c.num ? "n" : ""}${c.wrap ? " wrap" : ""}">${v}</td>`;
+  }).join("") + "</tr>").join("");
+  el.innerHTML = `<table class="t"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` + (data.length > max ? `<p class="hint" style="padding:6px">Showing ${max} of ${data.length}. Narrow the filter to see more.</p>` : "");
+  el.querySelectorAll("th").forEach(th => th.onclick = () => { const k = th.dataset.k; if (st.key === k) st.dir = -st.dir; else { st.key = k; st.dir = -1; } table(el, cols, rows, opts); });
+  if (opts.onClick) el.querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => opts.onClick(rows[+tr.dataset.i], tr));
+}
+function csvExport(name, cols, rows) {
+  const q = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [cols.map(c => q(c.csvLabel || c.label)).join(",")].concat(rows.map(r => cols.map(c => q(c.csv ? c.csv(r) : c.val ? c.val(r) : r[c.key])).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// ---------------------------------------------------------------- loading
+
+function compactSnap(r, off, len, u) {
+  const c = r.colonists || {}, f = r.fragility || {}, p = r.pressure || {}, h = r.hostiles || {}, t = r.threat || {}, w = r.wealth || {}, e = r.env || {}, st = r.storyteller || {};
+  return {
+    t: r.tick, d: r.day, reason: r.reason, map: r.map, home: r.player_home, eng: !!r.engaged, crisis: r.crisis_id || 0, cf: r.crisis_factors || null, incSeq: r.incident_seq || 0,
+    wealth: w.total, pts: t.default_points, danger: t.danger_rating,
+    cols: c.count, downed: c.downed, mental: c.in_mental_state, drafted: c.drafted, moodAvg: c.mood_avg, moodMin: c.mood_min, hpAvg: c.health_avg, hpMin: c.health_min, tend: c.need_tending,
+    able: f.able_adults, dep: f.dependents, docs: f.able_doctors, bMinor: f.below_minor_break, bMajor: f.below_major_break, bExt: f.below_extreme_break, margin: f.min_mood_margin,
+    fires: f.fires ?? p.fires, homeFires: f.fires_in_home, rain: f.rain_rate,
+    host: h.count, hostPow: h.combat_power, hostHome: h.in_home_area,
+    food: p.food_days, sick: p.sick_colonists, adapt: st.adapt_points_factor,
+    temp: e.outdoor_temp, weather: e.weather, conds: e.conditions, detail: !!r.colonist_details, u, off, len
+  };
+}
+
+async function parseFile(file, onProg) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dec = new TextDecoder("utf-8");
+  const sess = { uid: ++S.uid, file, name: file.name, path: file.webkitRelativePath || file.name, start: null, catalog: null, recs: [], snaps: [], bad: 0, tMin: Infinity, tMax: -Infinity };
+  let ls = 0, n = 0;
+  while (ls < buf.length) {
+    let nl = buf.indexOf(10, ls); if (nl === -1) nl = buf.length;
+    let end = nl; if (end > ls && buf[end - 1] === 13) end--;
+    if (end > ls) {
+      let r = null;
+      try { r = JSON.parse(dec.decode(buf.subarray(ls, end))); } catch { sess.bad++; }
+      if (r && typeof r === "object") {
+        if (isNum(r.tick)) { sess.tMin = Math.min(sess.tMin, r.tick); sess.tMax = Math.max(sess.tMax, r.tick); }
+        if (r.type === "snapshot") sess.snaps.push(compactSnap(r, ls, end - ls, sess.uid));
+        else if (r.type === "session_start") sess.start = r;
+        else if (r.type === "catalog") sess.catalog = r;
+        else { r._u = sess.uid; sess.recs.push(r); }
+      }
+    }
+    ls = nl + 1;
+    if (++n % 2500 === 0) { onProg(ls / buf.length); await sleep(); }
+  }
+  if (!sess.start && !sess.snaps.length && !sess.recs.length) return null;
+  const folder = (file.webkitRelativePath || "").split("/").slice(-2, -1)[0];
+  sess.runId = sess.start?.run_id || folder || file.name.replace(/\.jsonl$/i, "");
+  const m = /session_(\d{8})_(\d{6})/.exec(file.name);
+  sess.time = sess.start?.real_time_utc ? Date.parse(sess.start.real_time_utc)
+    : m ? Date.parse(`${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6)}T${m[2].slice(0, 2)}:${m[2].slice(2, 4)}:${m[2].slice(4)}Z`) : file.lastModified;
+  sess.t0 = sess.start?.tick ?? sess.tMin;
+  return sess;
+}
+
+async function addFiles(list) {
+  const files = [...list].filter(f => /\.jsonl$/i.test(f.name));
+  if (!files.length) { toast("No .jsonl files found there."); return; }
+  const prog = $("#progress"); prog.style.display = "block";
+  const total = files.reduce((a, f) => a + f.size, 0) || 1; let done = 0, added = 0;
+  for (const f of files) {
+    const key = f.name + ":" + f.size + ":" + f.lastModified;
+    if (S.fileKeys.has(key)) { done += f.size; continue; }
+    $("#progText").textContent = `Reading ${f.name} (${(f.size / 1e6).toFixed(1)} MB)…`;
+    try {
+      const sess = await parseFile(f, p => { $("#progBar").style.width = ((done + p * f.size) / total * 100).toFixed(1) + "%"; });
+      if (sess) {
+        S.fileKeys.add(key); added++;
+        if (!S.runs.has(sess.runId)) S.runs.set(sess.runId, { id: sess.runId, sessions: [] });
+        S.runs.get(sess.runId).sessions.push(sess);
+      }
+    } catch (e) { console.error(e); toast("Could not read " + f.name + ": " + e.message); }
+    done += f.size;
+  }
+  prog.style.display = "none"; $("#progBar").style.width = "0";
+  if (!added) { if (S.runs.size === 0) toast("Nothing readable in those files."); return; }
+  for (const run of S.runs.values()) buildViews(run);
+  toast(`Loaded ${added} session file${added > 1 ? "s" : ""}.`);
+  fillRunSelect();
+}
+
+// Sessions of one run in play order. Loading an older save rewinds time: records after that point in
+// earlier sessions belong to an abandoned timeline. Each rewind leaves one selectable abandoned branch.
+function buildViews(run) {
+  run.sessions.sort((a, b) => a.time - b.time);
+  const views = []; let segs = [];
+  for (const s of run.sessions) {
+    const T = s.t0;
+    const cut = segs.some(g => Math.min(g.hi, g.s.tMax + 1) > T);
+    if (cut) views.push({ abandoned: true, segs: segs.map(g => ({ ...g })), cutAt: T, endDay: maxDay(segs) });
+    segs = segs.map(g => ({ s: g.s, hi: Math.min(g.hi, T) })).filter(g => g.s.tMin < g.hi);
+    segs.push({ s, hi: Infinity });
+  }
+  views.push({ abandoned: false, segs, endDay: maxDay(segs) });
+  run.views = views.reverse(); // main timeline first
+  run.scenario = run.sessions[0].start?.scenario;
+  run.storyteller = run.sessions.at(-1).start?.storyteller;
+  run.lastPlayed = run.sessions.at(-1).time;
+}
+function maxDay(segs) {
+  let m = 0;
+  for (const g of segs) { const last = g.s.snaps.filter(x => x.t < g.hi).at(-1); if (last && isNum(last.d)) m = Math.max(m, last.d); }
+  return m;
+}
+function materialize(view) {
+  if (view.cache) return view.cache;
+  const recs = [], snaps = [];
+  for (const g of view.segs) {
+    for (const r of g.s.recs) if (!isNum(r.tick) || r.tick < g.hi) recs.push(r);
+    for (const x of g.s.snaps) if (x.t < g.hi) snaps.push(x);
+  }
+  const ord = new Map(view.segs.map((g, i) => [g.s.uid, i]));
+  recs.sort((a, b) => (a.tick - b.tick) || (ord.get(a._u) - ord.get(b._u)));
+  snaps.sort((a, b) => (a.t - b.t) || (ord.get(a.u) - ord.get(b.u)));
+  const sessions = new Map(view.segs.map(g => [g.s.uid, g.s]));
+  return (view.cache = analyze(recs, snaps, sessions));
+}
+
+// ---------------------------------------------------------------- model
+
+function intensity(c) {
+  const e = c.end; if (!e) return null;
+  const t = e.totals || {}, n = Math.max(1, e.colonists_start || 1);
+  let s = 4 * (t.colonists_died || 0) / n + 1.5 * (t.colonists_downed || 0) / n + 3 * (t.colonists_kidnapped || 0) / n;
+  if (e.wealth_start > 0 && isNum(e.wealth_end)) s += 3 * Math.max(0, (e.wealth_start - e.wealth_end) / e.wealth_start);
+  if (e.buildings_start > 0 && isNum(e.buildings_end)) s += 3 * Math.max(0, (e.buildings_start - e.buildings_end) / e.buildings_start);
+  s += 0.3 * Math.min(5, t.mental_breaks || 0);
+  const r = c.rec;
+  if (r) {
+    if (isNum(r.mood_before) && isNum(r.mood_min)) s += 2 * Math.max(0, r.mood_before - r.mood_min);
+    const stable = r.ticks_to_stable >= 0 ? r.ticks_to_stable / TICKS_PER_DAY : (r.status === "timeout" ? 5 : null);
+    if (stable != null) s += 0.3 * Math.min(5, stable);
+    const d = r.during || {};
+    s += 4 * (d.colonists_died || 0) / n + 0.3 * Math.min(5, d.mental_breaks || 0);
+  }
+  return s;
+}
+
+function analyze(recs, snaps, sessions) {
+  const M = { recs, snaps, sessions, maps: new Map(), incidents: [], crises: [], fights: [], decisions: [], pawns: [], breaks: [], ratings: [], rejected: [], verdicts: [], schemas: new Set(), bad: 0 };
+  for (const s of sessions.values()) { M.schemas.add(s.start?.schema ?? "?"); M.bad += s.bad; }
+  const K = (u, id) => u + ":" + id;
+  const crisis = new Map(), fight = new Map(), decision = new Map(), preSnap = new Map();
+  const getC = (u, id) => { const k = K(u, id); if (!crisis.has(k)) { const c = { key: k, u, id, pawns: [], fights: [] }; crisis.set(k, c); M.crises.push(c); } return crisis.get(k); };
+  const getF = (u, id) => { const k = K(u, id); if (!fight.has(k)) { const f = { key: k, u, id }; fight.set(k, f); M.fights.push(f); } return fight.get(k); };
+
+  for (const x of snaps) {
+    const m = M.maps.get(x.map) || { id: x.map, n: 0, home: false, first: x.d, last: x.d };
+    m.n++; m.home = m.home || !!x.home; m.last = x.d; M.maps.set(x.map, m);
+    if (x.incSeq) preSnap.set(K(x.u, x.incSeq), x);
+  }
+  for (const r of recs) {
+    switch (r.type) {
+      case "incident": M.incidents.push({ r, key: K(r._u, r.seq) }); break;
+      case "incident_rejected": M.rejected.push(r); break;
+      case "candidates": { const d = { r }; decision.set(K(r._u, r.decision_id), d); M.decisions.push(d); break; }
+      case "crisis_start": { const c = getC(r._u, r.crisis_id); c.start = r; break; }
+      case "crisis_end": { const c = getC(r._u, r.crisis_id); c.end = r; break; }
+      case "engagement_start": { const f = getF(r._u, r.engagement_id); f.start = r; break; }
+      case "engagement_end": { const f = getF(r._u, r.engagement_id); f.end = r; break; }
+      case "recovery":
+        if (r.crisis_id != null) getC(r._u, r.crisis_id).rec = r; else if (r.engagement_id != null) getF(r._u, r.engagement_id).rec = r;
+        break;
+      case "rating":
+        M.ratings.push(r);
+        if (r.crisis_id) getC(r._u, r.crisis_id).rating = r; else if (r.engagement_id != null) getF(r._u, r.engagement_id).rating = r;
+        break;
+      case "pawn_event": M.pawns.push(r); if (r.crisis_id) getC(r._u, r.crisis_id).pawns.push(r); break;
+      case "mental_break": M.breaks.push(r); break;
+      case "colony_incapacitated": case "game_over": M.verdicts.push(r); break;
+    }
+  }
+  for (const c of M.crises) {
+    const s = c.start, e = c.end;
+    c.map = (s || e || c.rec || {}).map;
+    c.d0 = s ? s.day : e ? e.day - (e.duration_ticks || 0) / TICKS_PER_DAY : (c.rating?.day ?? null);
+    c.d1 = e ? (e.start_tick != null ? (e.start_tick + e.duration_ticks) / TICKS_PER_DAY + (e.day - e.tick / TICKS_PER_DAY) : e.day) : null;
+    c.factors = e?.factors || s?.factors || c.rating?.factors || [];
+    c.primary = primaryFactor(c.factors);
+    c.incSeqs = e?.incident_seqs || s?.recent_incident_seqs || c.rating?.incident_seqs || [];
+    c.incLabels = e?.incidents || s?.recent_incidents || [];
+    c.engIds = e?.engagement_ids || c.rating?.engagement_ids || [];
+    c.intensity = intensity(c);
+    for (const id of c.engIds) { const f = fight.get(K(c.u, id)); if (f) { c.fights.push(f); f.crisis = c; } }
+  }
+  M.crises = M.crises.filter(c => c.start || c.end).sort((a, b) => a.d0 - b.d0);
+  for (const f of M.fights) {
+    f.map = (f.start || f.end || {}).map;
+    f.d0 = f.start ? f.start.day : f.end ? f.end.day - (f.end.duration_ticks || 0) / TICKS_PER_DAY : null;
+    f.d1 = f.end ? f.end.day : null;
+    f.incSeqs = f.end?.incident_seqs || f.start?.incident_seqs || [];
+  }
+  M.fights = M.fights.filter(f => f.start || f.end).sort((a, b) => a.d0 - b.d0);
+  const incByKey = new Map(M.incidents.map(i => [i.key, i]));
+  for (const c of M.crises) for (const s of c.incSeqs) { const i = incByKey.get(K(c.u, s)); if (i && !i.crisis) i.crisis = c; }
+  for (const f of M.fights) for (const s of f.incSeqs) { const i = incByKey.get(K(f.u, s)); if (i && !i.fight) i.fight = f; }
+  for (const i of M.incidents) {
+    i.pre = preSnap.get(i.key) || null;
+    i.decision = i.r.decision_id ? decision.get(K(i.r._u, i.r.decision_id)) : null;
+    if (i.decision) i.decision.incident = i;
+    i.rating = i.crisis?.rating || i.fight?.rating || null;
+  }
+  for (const d of M.decisions) {
+    const u = d.r.usable || [];
+    const ch = u.find(x => x.def === d.r.chosen);
+    const catSum = u.filter(x => x.category === d.r.chosen_category).reduce((a, x) => a + (x.weight || 0), 0);
+    d.weight = ch?.weight ?? null; d.share = ch && catSum > 0 ? ch.weight / catSum : null; d.n = u.length;
+  }
+  return M;
+}
+
+// ---------------------------------------------------------------- selection UI
+
+function fillRunSelect() {
+  const runs = [...S.runs.values()].sort((a, b) => b.lastPlayed - a.lastPlayed);
+  const sel = $("#selRun");
+  sel.innerHTML = runs.map(r => `<option value="${esc(r.id)}">${esc(r.id)} · ${esc(r.scenario || "?")} · ${esc(r.storyteller ? r.storyteller.def + " " + r.storyteller.difficulty : "")} · to day ${fmt(r.views[0].endDay, 0)}</option>`).join("");
+  const keep = S.run && S.runs.has(S.run.id) ? S.run.id : runs[0].id;
+  sel.value = keep;
+  $("#empty").hidden = true; $("#app").hidden = false; $("#tabs").hidden = false;
+  $("#ctlRun").hidden = false;
+  selectRun(keep);
+}
+function selectRun(id) {
+  S.run = S.runs.get(id);
+  const sel = $("#selView");
+  sel.innerHTML = S.run.views.map((v, i) => `<option value="${i}">${v.abandoned ? `Abandoned branch (to day ${fmt(v.endDay, 1)})` : `Main timeline (to day ${fmt(v.endDay, 1)})`}</option>`).join("");
+  $("#ctlView").hidden = S.run.views.length < 2;
+  sel.value = "0";
+  selectView(0);
+}
+function selectView(i) {
+  S.view = S.run.views[i];
+  S.M = materialize(S.view);
+  S.sel = {};
+  const maps = [...S.M.maps.values()].sort((a, b) => b.n - a.n);
+  const home = maps.find(m => m.home) || maps[0];
+  const sel = $("#selMap");
+  sel.innerHTML = maps.map(m => `<option value="${m.id}">Map ${m.id}${m.home ? " (home)" : ""} · day ${fmt(m.first, 0)}–${fmt(m.last, 0)}</option>`).join("");
+  $("#ctlMap").hidden = maps.length < 2;
+  S.map = home ? home.id : 0; sel.value = String(S.map);
+  renderAll();
+}
+function onMap(r) { return r.map === undefined || r.map === null || r.map === S.map; }
+const mapSnaps = () => S.M.snaps.filter(x => x.map === S.map);
+
+function renderAll() {
+  S.rendered = {};
+  renderTab(S.tab);
+}
+function renderTab(tab) {
+  if (!S.M || S.rendered[tab]) return;
+  S.rendered[tab] = true;
+  ({ overview: renderOverview, crises: renderCrises, incidents: renderIncidents, storyteller: renderStoryteller, colony: renderColony, log: renderLog })[tab]();
+}
+
+// ---------------------------------------------------------------- overview
+
+function renderOverview() {
+  const M = S.M, sn = mapSnaps();
+  const first = sn[0], last = sn.at(-1);
+  const threats = M.incidents.filter(i => /^Threat/.test(i.r.category)).length;
+  const colDeaths = M.pawns.filter(p => p.event === "Died" && (p.side === "colonist" || p.side === "berserk")).length;
+  const breaks = M.breaks.filter(b => b.stage !== "Baby").length;
+  const rated = M.ratings.filter(r => !r.skipped);
+  const avg = rated.length ? rated.reduce((a, r) => a + r.score, 0) / rated.length : null;
+  const ended = M.ratings.filter(r => r.ended_run).length;
+  const stat = (k, v, s = "") => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  $("#ovStats").innerHTML = [
+    stat("Days covered", first ? fmt(last.d - first.d, 1) : "–", first ? `day ${fmt(first.d, 1)} → ${fmt(last.d, 1)}` : ""),
+    stat("Sessions", S.view.segs.length, S.run.views.length > 1 ? `${S.run.views.length - 1} abandoned branch(es)` : "no rewinds"),
+    stat("Colonists now", last ? fmt(last.cols) : "–", last ? `${fmt(last.able)} able · ${fmt(last.dep)} dependent` : ""),
+    stat("Wealth now", last ? fmt(last.wealth) : "–", last ? `raid points ${fmt(last.pts)}` : ""),
+    stat("Incidents", M.incidents.length, `${threats} threats`),
+    stat("Crises", M.crises.length, `${M.fights.length} fights`),
+    stat("Colonist deaths", colDeaths, `${breaks} mental breaks`),
+    stat("Ratings", rated.length, avg != null ? `average ${avg.toFixed(1)} · ${ended} ended a run` : "none yet"),
+  ].join("");
+  const notes = [];
+  notes.push(`Schema version${M.schemas.size > 1 ? "s" : ""} ${[...M.schemas].join(", ")}.`);
+  if (M.bad) notes.push(`${M.bad} unreadable line(s) skipped.`);
+  if (S.view.abandoned) notes.push("You are viewing an abandoned branch: what happened before a save was reloaded (or before a new colony started in this world).");
+  $("#ovNotes").textContent = notes.join(" ");
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const el = $("#tl"), M = S.M, sn = mapSnaps();
+  if (!sn.length) { el.innerHTML = '<p class="hint">No snapshots for this map.</p>'; return; }
+  const x = sn.map(s => s.d), cd = sn.map((_, i) => i);
+  const L = (name, key, yaxis, color, extra = {}) => ({
+    type: "scattergl", mode: "lines", name, x, y: sn.map(s => s[key] ?? null), yaxis, customdata: cd,
+    line: Object.assign({ color, width: 1.5 }, extra.line || {}), hovertemplate: `${name}: %{y:.3~f}<extra></extra>`, ...extra.t
+  });
+  const lanes = ["Incidents", "Crises", "Fights", "Deaths", "Breaks", "Ratings"];
+  const data = [
+    L("Wealth", "wealth", "y2", "#2f6fde"),
+    L("Raid points", "pts", "y3", "#e5484d", { line: { dash: "dot" } }),
+    L("Colonists", "cols", "y4", "#2f6fde", { line: { shape: "hv" } }),
+    L("Able adults", "able", "y4", "#30a46c", { line: { shape: "hv" } }),
+    L("Dependents", "dep", "y4", "#e2a300", { line: { shape: "hv" } }),
+    L("Downed (babies count)", "downed", "y4", "#e5484d", { line: { shape: "hv" } }),
+    L("Mood avg", "moodAvg", "y5", "#8e4ec6"),
+    L("Mood min", "moodMin", "y5", "#d6409f", { line: { width: 1 } }),
+    L("Health avg", "hpAvg", "y5", "#30a46c"),
+    L("Health min", "hpMin", "y5", "#12a594", { line: { width: 1 } }),
+    L("Fires", "fires", "y6", "#f76b15"),
+    L("Fires in home", "homeFires", "y6", "#c2410c", { line: { width: 1 } }),
+    L("Hostiles (incl. dormant hives)", "host", "y7", "#e5484d", { line: { shape: "hv" } }),
+  ];
+  const ev = (lane, items, opts) => items.length && data.push(Object.assign({
+    type: "scatter", mode: "markers", yaxis: "y", x: items.map(o => o.x), y: items.map(() => lane), text: items.map(o => o.text), customdata: items.map(o => o.cd),
+    hovertemplate: "%{text}<extra></extra>", marker: { size: items.map(o => o.size || 9), color: items.map(o => o.color), symbol: items.map(o => o.symbol || "circle"), line: { width: items.map(o => o.lw || 0), color: css("--text") } }
+  }, opts || {}));
+  // incidents
+  ev("Incidents", M.incidents.filter(i => onMap(i.r)).map(i => ({
+    x: i.r.day, cd: { k: "inc", key: i.key }, color: CAT_COL[i.r.category] || "#8b8d98", size: /^Threat/.test(i.r.category) ? 11 : 7,
+    text: `<b>${esc(i.r.def)}</b> · ${esc(i.r.category)}<br>${day(i.r.day)} · points ${fmt(i.r.points)}${i.r.faction ? "<br>" + esc(i.r.faction) : ""}${i.r.raid ? `<br>raid: ${i.r.raid.count} pawns, power ${fmt(i.r.raid.combat_power)}` : ""}<br>source: ${esc(i.r.source)}`
+  })));
+  // crises and fights as segments
+  const segTrace = (lane, items, colorOf, textOf, cdOf) => {
+    const groups = new Map();
+    for (const o of items) { const col = colorOf(o); if (!groups.has(col)) groups.set(col, []); groups.get(col).push(o); }
+    for (const [col, arr] of groups) {
+      const xs = [], ys = [], tx = [], cds = [];
+      for (const o of arr) { const d1 = o.d1 ?? S.view.endDay; xs.push(o.d0, d1, null); ys.push(lane, lane, null); tx.push(textOf(o), textOf(o), null); cds.push(cdOf(o), cdOf(o), null); }
+      data.push({ type: "scatter", mode: "lines+markers", yaxis: "y", x: xs, y: ys, text: tx, customdata: cds, hovertemplate: "%{text}<extra></extra>", line: { color: col, width: 7 }, marker: { size: 6, color: col } });
+    }
+  };
+  const crises = M.crises.filter(c => onMap(c));
+  segTrace("Crises", crises, c => FACTOR_COL[c.primary] || "#777",
+    c => `<b>Crisis</b> ${factorChipsTxt(c.factors)}<br>${day(c.d0)} · ${c.end ? hours(c.end.duration_ticks) : "open"}${c.end ? `<br>downed ${c.end.totals.colonists_downed}, died ${c.end.totals.colonists_died}` : ""}${c.rating && !c.rating.skipped ? `<br>rated ${c.rating.score} ${esc(c.rating.label)}` : ""}`,
+    c => ({ k: "crisis", key: c.key }));
+  segTrace("Fights", M.fights.filter(f => onMap(f)), f => f.start?.internal || f.end?.internal ? FACTOR_COL.internal_conflict : FACTOR_COL.combat,
+    f => `<b>Fight</b>${f.start?.internal ? " (own colonist)" : ""}<br>${day(f.d0)} · ${f.end ? hours(f.end.duration_ticks) : "open"}${f.start ? "<br>" + esc(Object.keys(f.start.hostiles?.kinds || {}).join(", ")) : ""}`,
+    f => ({ k: "fight", key: f.key }));
+  ev("Deaths", M.pawns.filter(p => onMap(p) && ["colonist", "berserk", "colony"].includes(p.side)).map(p => {
+    const col = p.side !== "colony";
+    return {
+      x: p.day, cd: { k: "rec", rec: p }, symbol: p.event === "Died" ? "x" : "triangle-down", size: col ? 12 : 6,
+      color: p.event === "Died" ? (col ? "#e5484d" : "#8b8d98") : (col ? "#f76b15" : "#b9bbc6"),
+      text: `<b>${esc(p.event)}</b> ${esc(p.kind)} (${esc(p.side)})${p.cause_hediff ? "<br>cause: " + esc(p.cause_hediff) : ""}${p.instigator_kind ? "<br>by " + esc(p.instigator_kind) + " (" + esc(p.instigator_side) + ")" : ""}<br>${day(p.day)}`
+    };
+  }));
+  ev("Breaks", M.breaks.filter(b => onMap(b)).map(b => ({
+    x: b.day, cd: { k: "rec", rec: b }, size: b.stage === "Baby" ? 5 : 10, color: b.aggressive ? "#d6409f" : b.stage === "Baby" ? "#b9bbc6" : "#e2a300",
+    text: `<b>${esc(b.state)}</b> (${esc(b.stage || "")})${b.caused_by_mood ? "<br>caused by mood" : ""}<br>${day(b.day)}`
+  })));
+  ev("Ratings", M.ratings.filter(r => !r.skipped).map(r => ({
+    x: r.day, cd: { k: "rec", rec: r }, symbol: r.ended_run ? "star-diamond" : "star", size: 15, lw: r.ended_run ? 1.5 : 0, color: SCORE_COL[r.score] || "#777",
+    text: `<b>Rated ${r.score} · ${esc(r.label)}</b>${r.ended_run ? "<br>ended the run" : ""}<br>${esc((r.factors || []).join(" + "))}<br>${day(r.day)}`
+  })));
+
+  const T = plotTheme(), ax = T._ax;
+  const dom = { y: [0.86, 1], y2: [0.655, 0.835], y4: [0.44, 0.625], y5: [0.225, 0.41], y6: [0, 0.195] };
+  const shapes = crises.map(c => ({ type: "rect", xref: "x", yref: "paper", x0: c.d0, x1: c.d1 ?? S.view.endDay, y0: 0, y1: 0.835, fillcolor: FACTOR_COL[c.primary] || "#777", opacity: 0.1, line: { width: 0 }, layer: "below" }));
+  const ann = (txt, y) => ({ text: txt, xref: "paper", yref: "paper", x: 0, y, xanchor: "left", yanchor: "bottom", showarrow: false, font: { size: 11, color: css("--muted") } });
+  const layout = Object.assign(T, {
+    height: 820, margin: { l: 70, r: 56, t: 6, b: 40 }, hovermode: "closest", dragmode: "zoom", shapes,
+    xaxis: Object.assign({}, ax, { anchor: "y6", title: { text: "in-game day (since settling)", font: { color: css("--muted") } }, showspikes: true, spikemode: "across", spikesnap: "cursor", spikethickness: 1, spikecolor: css("--muted"), spikedash: "dot" }),
+    yaxis: Object.assign({}, ax, { domain: dom.y, type: "category", categoryarray: lanes, range: [-0.6, lanes.length - 0.4], fixedrange: true, showgrid: true }),
+    yaxis2: Object.assign({}, ax, { domain: dom.y2, fixedrange: true, title: { text: "wealth", font: { color: "#2f6fde", size: 11 } } }),
+    yaxis3: Object.assign({}, ax, { overlaying: "y2", side: "right", fixedrange: true, showgrid: false, title: { text: "raid pts", font: { color: "#e5484d", size: 11 } } }),
+    yaxis4: Object.assign({}, ax, { domain: dom.y4, fixedrange: true, rangemode: "tozero", title: { text: "pawns", font: { size: 11 } } }),
+    yaxis5: Object.assign({}, ax, { domain: dom.y5, fixedrange: true, range: [0, 1.15], title: { text: "0–1", font: { size: 11 } } }),
+    yaxis6: Object.assign({}, ax, { domain: dom.y6, fixedrange: true, rangemode: "tozero", title: { text: "fires", font: { color: "#f76b15", size: 11 } } }),
+    yaxis7: Object.assign({}, ax, { overlaying: "y6", side: "right", fixedrange: true, showgrid: false, rangemode: "tozero", title: { text: "hostiles", font: { color: "#e5484d", size: 11 } } }),
+    annotations: [ann("Wealth · raid points", dom.y2[1]), ann("Colonists · able adults · dependents · downed", dom.y4[1]), ann("Mood · health (avg and min)", dom.y5[1]), ann("Fires · hostiles", dom.y6[1])]
+  });
+  plot(el, data, layout);
+  if (el._wired || typeof Plotly === "undefined") return;
+  el._wired = true;
+  el.on("plotly_hover", e => { const p = e.points[0]; const s = mapSnaps(); const i = bisect(s, p.x, q => q.d); if (i >= 0) readout(s[i]); });
+  el.on("plotly_click", e => {
+    const p = e.points[0], c = p.customdata;
+    if (c && typeof c === "object") openItem(c);
+    else { const s = mapSnaps(); const i = typeof c === "number" ? c : bisect(s, p.x, q => q.d); if (s[i]) openSnapshot(s[i]); }
+  });
+  const leg = Object.entries(CAT_COL).map(([k, v]) => `<span><i style="background:${v}"></i>${k}</span>`).join("") +
+    '<span style="margin-left:12px"></span>' + Object.entries(FACTOR_COL).map(([k, v]) => `<span><i style="background:${v};opacity:.6"></i>${k.replace(/_/g, " ")}</span>`).join("");
+  $("#tlLegend").innerHTML = "Incident categories: " + leg.replace('<span style="margin-left:12px"></span>', '<span style="margin-left:12px">Crisis factors (bands):</span>');
+}
+function factorChipsTxt(fs) { return (fs || []).map(f => `<span style="color:${FACTOR_COL[f] || "#777"}">${esc(f.replace(/_/g, " "))}</span>`).join(" + "); }
+function readout(s) {
+  const r = (k, v) => `<span><b>${k}</b> ${v}</span>`;
+  $("#readout").innerHTML = [
+    r("", day(s.d)), r("Colonists", `${fmt(s.cols)} (${fmt(s.able)} able, ${fmt(s.dep)} dep, ${fmt(s.downed)} downed)`),
+    r("Mood", `${pct(s.moodAvg)} / min ${pct(s.moodMin)}`), r("Health", `${pct(s.hpAvg)} / min ${pct(s.hpMin)}`),
+    r("Below break", `${fmt(s.bMinor)} minor · ${fmt(s.bMajor)} major · ${fmt(s.bExt)} extreme`),
+    r("Wealth", fmt(s.wealth)), r("Raid pts", fmt(s.pts)), r("Hostiles", `${fmt(s.host)}${s.hostHome ? ` (${s.hostHome} in base)` : ""}`),
+    r("Fires", `${fmt(s.fires)}${isNum(s.homeFires) ? ` (${s.homeFires} in base)` : ""}`), r("Food", isNum(s.food) ? s.food.toFixed(1) + " d" : "–"),
+    r("Weather", esc(s.weather || "–")), s.conds?.length ? r("Conditions", esc(s.conds.join(", "))) : "",
+    s.cf ? r("Crisis", factorChipsTxt(s.cf)) : ""
+  ].join("");
+}
+
+// ---------------------------------------------------------------- inspector
+
+function openPanel(title, html) { $("#inTitle").textContent = title; $("#inBody").innerHTML = html; $("#inspector").classList.add("on"); }
+function closePanel() { $("#inspector").classList.remove("on"); }
+const kv = obj => `<dl class="kv">${Object.entries(obj).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+const rawJson = (o, open) => `<details${open ? " open" : ""}><summary>Raw record</summary><pre class="json">${esc(JSON.stringify(o, (k, v) => k.startsWith("_") ? undefined : v, 2))}</pre></details>`;
+
+function openItem(c) {
+  if (c.k === "inc") { const i = S.M.incidents.find(x => x.key === c.key); if (i) openIncident(i); }
+  else if (c.k === "crisis") { const cr = S.M.crises.find(x => x.key === c.key); if (cr) { switchTab("crises"); selectCrisis(cr); } }
+  else if (c.k === "fight") { const f = S.M.fights.find(x => x.key === c.key); if (f) openFight(f); }
+  else if (c.k === "rec") openRecord(c.rec);
+}
+function describe(r) {
+  const t = r.totals || {};
+  switch (r.type) {
+    case "incident": return `${r.def} [${r.category}] · points ${fmt(r.points)}${r.faction ? " · " + r.faction : ""}${r.raid ? ` · raid ${r.raid.count} pawns` : ""}${r.success === false ? " · FAILED" : ""}`;
+    case "incident_rejected": return `${r.def} [${r.category}] could not fire`;
+    case "candidates": return `chose ${r.chosen} out of ${(r.usable || []).length} (${r.source})`;
+    case "crisis_start": return `crisis begins: ${(r.factors || []).join(" + ")}`;
+    case "crisis_end": return `crisis over: ${(r.factors || []).join(" + ")} · ${hours(r.duration_ticks)} · downed ${t.colonists_downed}, died ${t.colonists_died}`;
+    case "recovery": return `aftermath ${r.status} · stable after ${ticksDays(r.ticks_to_stable)}`;
+    case "rating": return r.skipped ? "rating skipped" : `rated ${r.score} ${r.label}${r.ended_run ? " · ended the run" : ""}`;
+    case "engagement_start": return `fight begins${r.internal ? " (own colonist)" : ""}: ${Object.entries(r.hostiles?.kinds || {}).map(([k, v]) => v + "× " + k).join(", ")}`;
+    case "engagement_end": return `fight over · ${hours(r.duration_ticks)} · colonists downed ${t.colonists_downed}, died ${t.colonists_died} · hostiles died ${t.hostiles_died}`;
+    case "pawn_event": return `${r.event} ${r.kind} (${r.side})${r.instigator_kind ? " by " + r.instigator_kind : ""}${r.cause_hediff ? " · " + r.cause_hediff : ""}`;
+    case "mental_break": return `${r.state} (${r.stage || "?"})${r.aggressive ? " · aggressive" : ""}`;
+    case "colony_incapacitated": return "nobody left standing";
+    case "game_over": return "game over";
+    case "storyteller_changed": return `now ${r.storyteller?.def} ${r.storyteller?.difficulty}`;
+    default: return "";
+  }
+}
+function openRecord(r) {
+  const extra = r.type === "pawn_event" ? kv({ Event: esc(r.event), Pawn: esc(r.kind), Side: esc(r.side), Cause: esc(r.cause_hediff || r.damage_def || ""), "By": esc((r.instigator_kind || "") + (r.instigator_side ? " (" + r.instigator_side + ")" : "")), Burning: r.burning == null ? "" : r.burning ? "yes" : "no", "Nearest able colonist": isNum(r.nearest_able_colonist_distance) ? (r.nearest_able_colonist_distance < 0 ? "none" : fmt(r.nearest_able_colonist_distance, 1) + " cells") : "", Conditions: esc(Object.entries(r.conditions || {}).map(([k, v]) => v > 1 ? `${k}×${v}` : k).join(", ")) }) : "";
+  openPanel(r.type.replace(/_/g, " "), `<p>${esc(describe(r))}</p><p class="hint">${day(r.day)} · tick ${fmt(r.tick)}</p>${extra}${rawJson(r, !extra)}`);
+}
+function openIncident(i) {
+  const r = i.r, c = i.crisis, f = i.fight;
+  let html = kv({
+    When: day(r.day), Category: esc(r.category), Source: esc(r.source), "Points (default → used)": `${fmt(r.default_points)} → ${fmt(r.points)}`,
+    Faction: esc(r.faction || ""), Strategy: esc(r.raid_strategy || ""), Arrival: esc(r.arrival_mode || ""), Success: r.success ? "yes" : "no"
+  });
+  if (r.raid) html += `<h3>Raid</h3>${kv({ Pawns: r.raid.count, "Combat power": fmt(r.raid.combat_power), Kinds: esc(Object.entries(r.raid.kinds || {}).map(([k, v]) => v + "× " + k).join(", ")), Weapons: esc(Object.entries(r.raid.weapons || {}).map(([k, v]) => v + "× " + k).join(", ")) })}`;
+  if (i.pre) html += `<h3>Colony right before</h3>${kv({ Colonists: `${fmt(i.pre.cols)} (${fmt(i.pre.able)} able)`, Wealth: fmt(i.pre.wealth), "Mood avg": pct(i.pre.moodAvg), "Below break": fmt(i.pre.bMinor) })}<p><button class="btn" id="btnPre">Open full snapshot</button></p>`;
+  if (c) html += `<h3>Linked crisis</h3><p>${factorChips(c.factors)} ${day(c.d0)} · ${scoreBadge(c.rating)}</p><p><button class="btn" id="btnCr">Open crisis</button></p>`;
+  if (f) html += `<h3>Linked fight</h3><p>${day(f.d0)} · ${f.end ? hours(f.end.duration_ticks) : "open"}</p>`;
+  if (i.decision) html += `<h3>Storyteller choice</h3><p>${fmt(i.decision.n)} usable incidents; chosen weight ${fmt(i.decision.weight, 2)}${i.decision.share != null ? ` (${pct(i.decision.share)} of its category)` : ""}.</p>`;
+  openPanel(r.def, html + rawJson(r));
+  if (i.pre) $("#btnPre").onclick = () => openSnapshot(i.pre);
+  if (c) $("#btnCr").onclick = () => { closePanel(); switchTab("crises"); selectCrisis(c); };
+}
+function openFight(f) {
+  const e = f.end || {}, t = e.totals || {}, p = e.player || {};
+  let html = kv({
+    When: day(f.d0), Duration: hours(e.duration_ticks), "Own colonist (berserk)": f.start?.internal ? "yes" : "no", "Peak hostiles": `${fmt(e.peak_hostiles)} (power ${fmt(e.peak_hostile_combat_power)})`,
+    "In home area at peak": fmt(e.peak_hostiles_in_home_area), "Colonist damage taken": fmt(t.colonist_damage_taken, 1), "Colonists downed / died": `${fmt(t.colonists_downed)} / ${fmt(t.colonists_died)}`,
+    "Hostiles died (by colony)": `${fmt(t.hostiles_died)} (${fmt(t.hostiles_killed_by_colony)})`, "Real time": isNum(p.real_seconds) ? `${fmt(p.real_seconds, 0)} s, paused ${fmt(p.paused_seconds, 0)} s` : "–",
+    "Time to first draft": hours(p.ticks_to_first_draft)
+  });
+  if (f.crisis) html += `<p><button class="btn" id="btnFc">Open its crisis</button></p>`;
+  openPanel("Fight", html + rawJson(f.end || f.start));
+  if (f.crisis) $("#btnFc").onclick = () => { closePanel(); switchTab("crises"); selectCrisis(f.crisis); };
+}
+async function loadFull(x) {
+  const s = S.M.sessions.get(x.u);
+  const txt = await s.file.slice(x.off, x.off + x.len).text();
+  return JSON.parse(txt);
+}
+async function openSnapshot(x) {
+  openPanel("Snapshot", '<p class="hint">Loading…</p>');
+  let r; try { r = await loadFull(x); } catch (e) { $("#inBody").innerHTML = `<p>Could not read the snapshot: ${esc(e.message)}</p>`; return; }
+  const c = r.colonists || {}, f = r.fragility || {};
+  let html = `<p class="hint">${day(r.day)} · ${esc(r.reason)} snapshot · map ${r.map}${r.crisis_factors ? " · crisis: " + esc(r.crisis_factors.join(" + ")) : ""}</p>`;
+  html += kv({ Colonists: `${fmt(c.count)} (${fmt(f.able_adults)} able, ${fmt(f.dependents)} dependent, ${fmt(c.downed)} downed)`, Mood: `${pct(c.mood_avg)} avg, ${pct(c.mood_min)} min`, Health: `${pct(c.health_avg)} avg, ${pct(c.health_min)} min`, Wealth: fmt(r.wealth?.total), "Raid points now": fmt(r.threat?.default_points), Hostiles: fmt(r.hostiles?.count), Fires: `${fmt(f.fires ?? r.pressure?.fires)}${isNum(f.fires_in_home) ? ` (${f.fires_in_home} in base)` : ""}`, "Food days": fmt(r.pressure?.food_days, 1), Weather: esc(r.env?.weather), "Since last snapshot": esc(Object.entries(r.since_last || {}).filter(([k, v]) => v && k !== "ticks").map(([k, v]) => `${k.replace(/_/g, " ")} ${fmt(v, 1)}`).join(", ") || "nothing") });
+  if (x.detail) html += `<p><button class="btn" id="btnCo">Open in Colony tab</button></p>`;
+  openPanel("Snapshot", html + rawJson(r));
+  if (x.detail) $("#btnCo").onclick = () => { closePanel(); switchTab("colony"); colonyGoTo(x); };
+}
+
+// ---------------------------------------------------------------- crises & fights
+
+function crisisCols() {
+  return [
+    { key: "d0", label: "Day", num: true, val: c => c.d0, fmt: v => fmt(v, 1) },
+    { key: "dur", label: "Duration", num: true, val: c => c.end?.duration_ticks ?? null, fmt: v => hours(v) },
+    { key: "factors", label: "Factors", val: c => c.factors.join(" + "), html: c => factorChips(c.factors), csv: c => c.factors.join("+") },
+    { key: "conc", label: "Max at once", num: true, val: c => c.end?.max_concurrent_factors ?? null, title: "Most crisis factors active at the same time" },
+    { key: "inc", label: "Incidents", val: c => c.incLabels.join(", "), wrap: true },
+    { key: "down", label: "Downed", num: true, val: c => c.end?.totals?.colonists_downed ?? null },
+    { key: "died", label: "Died", num: true, val: c => c.end?.totals?.colonists_died ?? null },
+    { key: "bld", label: "Buildings lost", num: true, val: c => c.end?.totals?.buildings_destroyed ?? null },
+    { key: "fires", label: "Peak fires", num: true, val: c => c.end?.peak_fires ?? null },
+    { key: "stable", label: "Recovered in", num: true, val: c => c.rec ? (c.rec.ticks_to_stable >= 0 ? c.rec.ticks_to_stable : null) : null, fmt: (v, c) => c.rec ? (v != null ? ticksDays(v) : c.rec.status.replace(/_/g, " ")) : "–" },
+    { key: "intensity", label: "Draft intensity", num: true, val: c => c.intensity, fmt: v => fmt(v, 2) },
+    { key: "score", label: "Rating", num: true, val: c => c.rating && !c.rating.skipped ? c.rating.score : null, html: c => scoreBadge(c.rating), csv: c => c.rating?.score ?? "" },
+    { key: "ended", label: "Ended run", val: c => c.rating?.ended_run ? "yes" : "", csvLabel: "ended_run" },
+  ];
+}
+function renderCrises() {
+  const M = S.M, crises = M.crises.filter(onMap);
+  const T = plotTheme();
+  // ratings distribution
+  const counts = [1, 2, 3, 4, 5].map(s => M.ratings.filter(r => r.score === s).length);
+  const skipped = M.ratings.filter(r => r.skipped).length;
+  plot($("#crRatings"), [{ type: "bar", x: ["1 Trivial", "2 Easy", "3 Good", "4 Hard", "5 Too much", "skipped"], y: counts.concat(skipped), marker: { color: SCORE_COL.slice(1).concat(css("--muted")) }, hovertemplate: "%{x}: %{y}<extra></extra>" }],
+    Object.assign(plotTheme(), { height: 260 }));
+  const rated = crises.filter(c => c.rating && !c.rating.skipped && c.intensity != null);
+  plot($("#crScatter"), [{
+    type: "scatter", mode: "markers", x: rated.map(c => c.intensity), y: rated.map(c => c.rating.score + (Math.random() - 0.5) * 0.25), customdata: rated.map(c => c.key),
+    text: rated.map(c => `${day(c.d0)} · ${c.factors.join(" + ")}<br>${esc(c.incLabels.slice(-3).join(", "))}`), hovertemplate: "%{text}<br>intensity %{x:.2f}<extra></extra>",
+    marker: { size: 10, color: rated.map(c => FACTOR_COL[c.primary] || "#777"), line: { width: rated.map(c => c.rating.ended_run ? 2 : 0), color: css("--text") } }
+  }], Object.assign(T, { height: 260, xaxis: Object.assign({}, T._ax, { title: { text: "draft intensity" } }), yaxis: Object.assign({}, T._ax, { title: { text: "your rating" }, range: [0.5, 5.5], dtick: 1 }) }));
+  const fc = {}; for (const c of crises) for (const f of c.factors) fc[f] = (fc[f] || 0) + 1;
+  const fk = Object.keys(fc).sort((a, b) => fc[b] - fc[a]);
+  plot($("#crFactors"), [{ type: "bar", orientation: "h", y: fk.map(f => f.replace(/_/g, " ")), x: fk.map(f => fc[f]), marker: { color: fk.map(f => FACTOR_COL[f] || "#777") }, hovertemplate: "%{y}: %{x} crises<extra></extra>" }],
+    Object.assign(plotTheme(), { height: 260, margin: { l: 110, r: 18, t: 10, b: 30 }, yaxis: Object.assign({}, plotTheme()._ax, { autorange: "reversed" }) }));
+  if (!$("#crScatter")._wired && typeof Plotly !== "undefined") { $("#crScatter")._wired = true; $("#crScatter").on("plotly_click", e => { const c = S.M.crises.find(x => x.key === e.points[0].customdata); if (c) selectCrisis(c); }); }
+
+  $("#crLegacy").hidden = !(crises.length === 0 && M.fights.length > 0);
+  const cols = crisisCols();
+  const draw = () => {
+    const q = $("#crSearch").value.trim().toLowerCase();
+    const rows = q ? crises.filter(c => (c.factors.join(" ") + " " + c.incLabels.join(" ")).toLowerCase().includes(q)) : crises;
+    $("#crCount").textContent = `${rows.length} crises`;
+    table($("#crTable"), cols, rows, { sort: "d0", dir: -1, onClick: c => selectCrisis(c), selected: c => S.sel.crisis === c });
+    $("#crCsv").onclick = () => csvExport(`crises_${S.run.id}.csv`, cols, rows);
+  };
+  $("#crSearch").oninput = draw; draw();
+  if (S.sel.crisis) selectCrisis(S.sel.crisis); else $("#crDetail").hidden = true;
+
+  const fights = M.fights.filter(onMap);
+  const fcols = [
+    { key: "d0", label: "Day", num: true, val: f => f.d0, fmt: v => fmt(v, 1) },
+    { key: "dur", label: "Duration", num: true, val: f => f.end?.duration_ticks ?? null, fmt: v => hours(v) },
+    { key: "internal", label: "Against", val: f => f.start?.internal || f.end?.internal ? "own colonist" : "outsiders" },
+    { key: "kinds", label: "Hostiles", val: f => Object.entries(f.start?.hostiles?.kinds || {}).map(([k, v]) => v + "× " + k).join(", "), wrap: true },
+    { key: "peak", label: "Peak hostiles", num: true, val: f => f.end?.peak_hostiles ?? null },
+    { key: "pow", label: "Peak power", num: true, val: f => f.end?.peak_hostile_combat_power ?? null, fmt: v => fmt(v) },
+    { key: "dmg", label: "Colonist dmg", num: true, val: f => f.end?.totals?.colonist_damage_taken ?? null, fmt: v => fmt(v, 0) },
+    { key: "down", label: "Downed", num: true, val: f => f.end?.totals?.colonists_downed ?? null },
+    { key: "died", label: "Died", num: true, val: f => f.end?.totals?.colonists_died ?? null },
+    { key: "kills", label: "Hostiles died (by colony)", num: true, val: f => f.end?.totals?.hostiles_died ?? null, fmt: (v, f) => v == null ? "–" : `${v} (${f.end.totals.hostiles_killed_by_colony ?? "?"})` },
+    { key: "paused", label: "Paused", num: true, val: f => f.end?.player && f.end.player.real_seconds > 0 ? f.end.player.paused_seconds / f.end.player.real_seconds : null, fmt: v => pct(v) },
+    { key: "score", label: "Rating", num: true, val: f => (f.rating || f.crisis?.rating)?.score ?? null, html: f => scoreBadge(f.rating || f.crisis?.rating) },
+  ];
+  $("#fiCount").textContent = `${fights.length} fights`;
+  table($("#fiTable"), fcols, fights, { sort: "d0", dir: -1, onClick: f => openFight(f) });
+  $("#fiCsv").onclick = () => csvExport(`fights_${S.run.id}.csv`, fcols, fights);
+}
+
+function selectCrisis(c) {
+  S.sel.crisis = c;
+  document.querySelectorAll("#crTable tbody tr").forEach(tr => tr.classList.remove("sel"));
+  const el = $("#crDetail"); el.hidden = false;
+  const e = c.end || {}, t = e.totals || {}, r = c.rec, p = e.player || {};
+  const stat = (k, v, s = "") => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  const timeline = (e.factor_timeline || []).map(ft => `<span class="pill">${hours(ft.after_ticks)} in: ${chip(ft.factor, FACTOR_COL[ft.factor] || "#777")} (${ft.concurrent} open)</span>`).join("") || '<span class="hint">–</span>';
+  const pawns = c.pawns.filter(x => x.side !== "neutral" && x.side !== "hostile");
+  const hostilePawns = c.pawns.filter(x => x.side === "hostile");
+  el.innerHTML = `
+    <h2>Crisis on ${day(c.d0)} ${factorChips(c.factors)} ${scoreBadge(c.rating)}</h2>
+    <div class="stats">
+      ${stat("Duration", e.duration_ticks != null ? hours(e.duration_ticks) : "open")}
+      ${stat("Colonists", `${fmt(e.colonists_start)} → ${fmt(e.colonists_end)}`, `downed ${fmt(t.colonists_downed)} · died ${fmt(t.colonists_died)}`)}
+      ${stat("Wealth", e.wealth_start ? pct((e.wealth_end - e.wealth_start) / e.wealth_start) : "–", `${fmt(e.wealth_start)} → ${fmt(e.wealth_end)}`)}
+      ${stat("Buildings lost", fmt(t.buildings_destroyed), `value ${fmt(t.building_value_lost)}`)}
+      ${stat("Peak fires", fmt(e.peak_fires), `${fmt(e.peak_fires_in_home)} in base · started by colony/hostiles/nature ${fmt(t.fires_started_by_colony)}/${fmt(t.fires_started_by_hostiles)}/${fmt(t.fires_started_naturally)}`)}
+      ${stat("Hostiles", `${fmt(t.hostiles_died)} died`, `${fmt(t.hostiles_killed_by_colony)} by colony · ${fmt(t.hostiles_exited_map)} left`)}
+      ${stat("Mental breaks", fmt(t.mental_breaks))}
+      ${stat("Aftermath", r ? (r.ticks_to_stable >= 0 ? ticksDays(r.ticks_to_stable) : r.status.replace(/_/g, " ")) : "–", r ? `mood ${pct(r.mood_before)} → min ${pct(r.mood_min)}` : "")}
+      ${stat("Draft intensity", fmt(c.intensity, 2))}
+      ${stat("Real time", isNum(p.real_seconds) ? fmt(p.real_seconds / 60, 1) + " min" : "–", isNum(p.paused_seconds) ? `${fmt(p.paused_seconds / 60, 1)} min paused` : "")}
+    </div>
+    <h3>How it stacked up</h3><div>${timeline}</div>
+    <h3>Incidents in the window</h3><div>${c.incLabels.map(l => `<span class="pill">${esc(l)}</span>`).join("") || '<span class="hint">none (the crisis was not started by an incident)</span>'}</div>
+    <h3>Colony during the crisis and aftermath</h3><div id="crZoom" class="plot"></div>
+    <h3>Colony casualties (${pawns.length})</h3>
+    <div class="tablewrap" style="max-height:240px" id="crPawns"></div>
+    <p class="hint">${hostilePawns.length} hostile pawn events in this crisis. ${c.rating?.ended_run ? "<b>You marked this as the end of the run.</b>" : ""}</p>
+    <p><button class="btn" id="crRaw">Raw records</button></p>`;
+  table($("#crPawns"), [
+    { key: "day", label: "Day", num: true, fmt: v => fmt(v, 2) }, { key: "event", label: "Event" }, { key: "kind", label: "Pawn" }, { key: "side", label: "Side" },
+    { key: "cause", label: "Cause", val: x => x.cause_hediff || x.damage_def || "" }, { key: "by", label: "By", val: x => x.instigator_kind ? `${x.instigator_kind} (${x.instigator_side})` : "" },
+    { key: "near", label: "Nearest able colonist", num: true, val: x => x.nearest_able_colonist_distance, fmt: v => isNum(v) ? (v < 0 ? "none" : fmt(v, 0)) : "–" },
+  ], pawns, { sort: "day", dir: 1, onClick: x => openRecord(x) });
+  $("#crRaw").onclick = () => openPanel("Crisis records", [c.start, c.end, c.rec, c.rating].filter(Boolean).map(x => `<h3>${esc(x.type)}</h3>${rawJson(x, true)}`).join(""));
+  // zoomed chart
+  const end = r ? r.day : (c.d1 ?? c.d0 + 0.5);
+  const pad = Math.max(0.15, (end - c.d0) * 0.1);
+  const sn = S.M.snaps.filter(x => x.map === c.map && x.d >= c.d0 - pad && x.d <= end + pad);
+  const Tz = plotTheme(), ax = Tz._ax;
+  const line = (name, key, yaxis, color, dash) => ({ type: "scatter", mode: "lines", name, x: sn.map(s => s.d), y: sn.map(s => s[key] ?? null), yaxis, line: { color, width: 1.6, dash }, hovertemplate: `${name}: %{y:.2f}<extra></extra>` });
+  plot($("#crZoom"), [
+    line("Mood avg", "moodAvg", "y", "#8e4ec6"), line("Mood min", "moodMin", "y", "#d6409f", "dot"), line("Health avg", "hpAvg", "y", "#30a46c"),
+    line("Able adults", "able", "y2", "#2f6fde"), line("Downed", "downed", "y2", "#e5484d"),
+    line("Fires", "fires", "y3", "#f76b15"), line("Hostiles", "host", "y4", "#b42318", "dot"),
+  ], Object.assign(Tz, {
+    height: 340, showlegend: true, legend: { orientation: "h", x: 0, y: 1, yanchor: "bottom", font: { size: 11 } }, hovermode: "x unified", margin: { l: 52, r: 52, t: 30, b: 36 },
+    shapes: [{ type: "rect", xref: "x", yref: "paper", x0: c.d0, x1: c.d1 ?? end, y0: 0, y1: 1, fillcolor: FACTOR_COL[c.primary] || "#777", opacity: 0.1, line: { width: 0 }, layer: "below" }],
+    xaxis: Object.assign({}, ax, { anchor: "y3", title: { text: "day" } }),
+    yaxis: Object.assign({}, ax, { domain: [0.68, 1], range: [0, 1.15], title: { text: "mood/health", font: { size: 11 } } }),
+    yaxis2: Object.assign({}, ax, { domain: [0.36, 0.64], rangemode: "tozero", title: { text: "pawns", font: { size: 11 } } }),
+    yaxis3: Object.assign({}, ax, { domain: [0, 0.32], rangemode: "tozero", title: { text: "fires", font: { size: 11 } } }),
+    yaxis4: Object.assign({}, ax, { overlaying: "y3", side: "right", rangemode: "tozero", showgrid: false, title: { text: "hostiles", font: { size: 11 } } }),
+  }));
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------------------------------------------------------------- incidents
+
+function renderIncidents() {
+  const M = S.M, all = M.incidents.filter(i => onMap(i.r));
+  const cats = [...new Set(all.map(i => i.r.category))].sort();
+  const catSel = $("#inCat"); const keep = catSel.value;
+  catSel.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option>${esc(c)}</option>`).join(""); catSel.value = cats.includes(keep) ? keep : "";
+  const cols = [
+    { key: "day", label: "Day", num: true, val: i => i.r.day, fmt: v => fmt(v, 1) },
+    { key: "def", label: "Incident", val: i => i.r.def },
+    { key: "cat", label: "Category", val: i => i.r.category, html: i => `<span style="color:${CAT_COL[i.r.category] || "inherit"}">●</span> ${esc(i.r.category)}` },
+    { key: "src", label: "Source", val: i => (i.r.source || "").replace("StorytellerComp_", "") },
+    { key: "pts", label: "Points", num: true, val: i => isNum(i.r.points) && i.r.points >= 0 ? i.r.points : null, fmt: v => fmt(v) },
+    { key: "fac", label: "Faction", val: i => i.r.faction || "" },
+    { key: "raid", label: "Raid pawns", num: true, val: i => i.r.raid?.count ?? null },
+    { key: "pow", label: "Raid power", num: true, val: i => i.r.raid?.combat_power ?? null, fmt: v => fmt(v) },
+    { key: "crisis", label: "Linked crisis", val: i => i.crisis ? i.crisis.factors.join(" + ") : "", html: i => i.crisis ? factorChips(i.crisis.factors) : "" },
+    { key: "int", label: "Draft intensity", num: true, val: i => i.crisis?.intensity ?? null, fmt: v => fmt(v, 2) },
+    { key: "score", label: "Rating", num: true, val: i => i.rating && !i.rating.skipped ? i.rating.score : null, html: i => scoreBadge(i.rating), csv: i => i.rating?.score ?? "" },
+    { key: "ok", label: "Fired", val: i => i.r.success === false ? "failed" : "ok" },
+  ];
+  const draw = () => {
+    const q = $("#inSearch").value.trim().toLowerCase(), cat = $("#inCat").value, thr = $("#inThreat").checked;
+    const rows = all.filter(i => (!cat || i.r.category === cat) && (!thr || /^Threat/.test(i.r.category)) && (!q || [i.r.def, i.r.category, i.r.faction, i.r.source].join(" ").toLowerCase().includes(q)));
+    $("#inCount").textContent = `${rows.length} of ${all.length}`;
+    table($("#inTable"), cols, rows, { sort: "day", dir: -1, onClick: i => openIncident(i) });
+    $("#inCsv").onclick = () => csvExport(`incidents_${S.run.id}.csv`, cols, rows);
+  };
+  $("#inSearch").oninput = draw; $("#inCat").onchange = draw; $("#inThreat").onchange = draw; draw();
+
+  const byCat = new Map(); for (const i of all) { if (!byCat.has(i.r.category)) byCat.set(i.r.category, []); byCat.get(i.r.category).push(i); }
+  const T = plotTheme();
+  plot($("#inTime"), [...byCat].map(([cat, arr]) => ({
+    type: "scatter", mode: "markers", name: cat, x: arr.map(i => i.r.day), y: arr.map(i => isNum(i.r.points) && i.r.points > 0 ? i.r.points : null), customdata: arr.map(i => i.key),
+    text: arr.map(i => i.r.def), hovertemplate: "%{text}<br>day %{x:.1f} · points %{y:.0f}<extra></extra>",
+    marker: { color: CAT_COL[cat] || "#8b8d98", size: arr.map(i => i.r.raid ? Math.min(26, 7 + Math.sqrt(i.r.raid.combat_power || 0) / 3) : 7), opacity: .85 }
+  })), Object.assign(T, { height: 320, showlegend: true, legend: { orientation: "h", x: 0, y: 1, yanchor: "bottom", font: { size: 11 } }, xaxis: Object.assign({}, T._ax, { title: { text: "day" } }), yaxis: Object.assign({}, T._ax, { title: { text: "points" }, type: "log" }) }));
+  const linked = all.filter(i => /^Threat/.test(i.r.category) && i.crisis && i.crisis.intensity != null && isNum(i.r.points));
+  const T2 = plotTheme();
+  plot($("#inOutcome"), [{
+    type: "scatter", mode: "markers", x: linked.map(i => i.r.points), y: linked.map(i => i.crisis.intensity), customdata: linked.map(i => i.key),
+    text: linked.map(i => `${esc(i.r.def)} · ${day(i.r.day)}${i.rating && !i.rating.skipped ? "<br>rated " + i.rating.score : ""}`), hovertemplate: "%{text}<br>points %{x:.0f} · intensity %{y:.2f}<extra></extra>",
+    marker: { size: 11, color: linked.map(i => i.rating && !i.rating.skipped ? SCORE_COL[i.rating.score] : css("--muted")), line: { width: 1, color: css("--panel") } }
+  }], Object.assign(T2, { height: 320, xaxis: Object.assign({}, T2._ax, { title: { text: "points used" }, type: "log" }), yaxis: Object.assign({}, T2._ax, { title: { text: "draft intensity" }, rangemode: "tozero" }) }));
+  for (const id of ["#inTime", "#inOutcome"]) {
+    const el = $(id); if (el._wired || typeof Plotly === "undefined") continue; el._wired = true;
+    el.on("plotly_click", e => { const i = S.M.incidents.find(x => x.key === e.points[0].customdata); if (i) openIncident(i); });
+  }
+}
+
+// ---------------------------------------------------------------- storyteller
+
+function renderStoryteller() {
+  const M = S.M, inc = M.incidents.filter(i => onMap(i.r));
+  if (!inc.length) { $("#stStack").innerHTML = '<p class="hint">No incidents.</p>'; }
+  else {
+    const d0 = Math.floor(inc[0].r.day), d1 = Math.ceil(inc.at(-1).r.day) + 1;
+    const bin = Math.max(1, Math.round((d1 - d0) / 45));
+    const bins = []; for (let b = d0; b < d1; b += bin) bins.push(b);
+    const cats = [...new Set(inc.map(i => i.r.category))];
+    const T = plotTheme();
+    plot($("#stStack"), cats.map(cat => ({
+      type: "bar", name: cat, x: bins.map(b => b + bin / 2), y: bins.map(b => inc.filter(i => i.r.category === cat && i.r.day >= b && i.r.day < b + bin).length),
+      marker: { color: CAT_COL[cat] || "#8b8d98" }, hovertemplate: `${cat}: %{y}<extra></extra>`, width: bin * 0.9
+    })), Object.assign(T, { height: 300, barmode: "stack", showlegend: true, legend: { orientation: "h", x: 0, y: 1, yanchor: "bottom", font: { size: 11 } }, xaxis: Object.assign({}, T._ax, { title: { text: `day (bins of ${bin} day${bin > 1 ? "s" : ""})` } }), yaxis: Object.assign({}, T._ax, { title: { text: "incidents" } }) }));
+  }
+  const decs = M.decisions.filter(d => onMap(d.r));
+  const cols = [
+    { key: "day", label: "Day", num: true, val: d => d.r.day, fmt: v => fmt(v, 1) },
+    { key: "chosen", label: "Chosen", val: d => d.r.chosen },
+    { key: "cat", label: "Category", val: d => d.r.chosen_category, html: d => `<span style="color:${CAT_COL[d.r.chosen_category] || "inherit"}">●</span> ${esc(d.r.chosen_category)}` },
+    { key: "src", label: "Component", val: d => (d.r.source || "").replace("StorytellerComp_", "") },
+    { key: "n", label: "Options", num: true, val: d => d.n },
+    { key: "share", label: "Share", num: true, val: d => d.share, fmt: v => pct(v) },
+  ];
+  table($("#stTable"), cols, decs, { sort: "day", dir: -1, onClick: d => showDecision(d), selected: d => S.sel.dec === d });
+  if (S.sel.dec) showDecision(S.sel.dec); else if (decs.length) showDecision(decs.at(-1));
+  const rj = {}; for (const r of M.rejected.filter(onMap)) rj[r.def] = (rj[r.def] || 0) + 1;
+  $("#stRejected").innerHTML = Object.keys(rj).length ? Object.entries(rj).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="pill">${esc(k)} × ${v}</span>`).join("") : '<span class="hint">None.</span>';
+}
+function showDecision(d) {
+  S.sel.dec = d;
+  document.querySelectorAll("#stTable tbody tr").forEach(tr => tr.classList.toggle("sel", S.M.decisions.filter(x => onMap(x.r))[+tr.dataset.i] === d));
+  const u = (d.r.usable || []).filter(x => x.weight > 0 || x.def === d.r.chosen).sort((a, b) => b.weight - a.weight).slice(0, 30);
+  $("#stDecTitle").textContent = `Candidates on ${day(d.r.day)}: chose ${d.r.chosen}`;
+  const T = plotTheme();
+  plot($("#stDec"), [{
+    type: "bar", orientation: "h", y: u.map(x => x.def), x: u.map(x => x.weight), text: u.map(x => x.category), hovertemplate: "%{y} · %{text}<br>weight %{x:.3f}<extra></extra>",
+    marker: { color: u.map(x => CAT_COL[x.category] || "#8b8d98"), opacity: u.map(x => x.def === d.r.chosen ? 1 : 0.45), line: { width: u.map(x => x.def === d.r.chosen ? 2.5 : 0), color: css("--text") } }
+  }], Object.assign(T, { height: Math.max(260, 22 * u.length + 60), margin: { l: 190, r: 18, t: 10, b: 36 }, yaxis: Object.assign({}, T._ax, { autorange: "reversed", tickfont: { size: 11, color: css("--muted") } }), xaxis: Object.assign({}, T._ax, { title: { text: "storyteller weight (0-weight options hidden)" } }) }));
+}
+
+// ---------------------------------------------------------------- colony
+
+let coList = [];
+function renderColony() {
+  coList = mapSnaps().filter(x => x.detail);
+  const sl = $("#coSlider");
+  sl.max = Math.max(0, coList.length - 1);
+  if (!coList.length) { $("#coBody").innerHTML = '<div class="card hint">No detailed snapshots for this map.</div>'; $("#coWhen").textContent = ""; return; }
+  const target = S.sel.colonySnap ? coList.indexOf(S.sel.colonySnap) : -1;
+  sl.value = target >= 0 ? target : coList.length - 1;
+  sl.oninput = () => showColony(+sl.value);
+  $("#coPrev").onclick = () => { sl.value = Math.max(0, +sl.value - 1); showColony(+sl.value); };
+  $("#coNext").onclick = () => { sl.value = Math.min(coList.length - 1, +sl.value + 1); showColony(+sl.value); };
+  showColony(+sl.value);
+}
+function colonyGoTo(x) {
+  S.sel.colonySnap = x;
+  if (S.rendered.colony) { const i = coList.indexOf(x); if (i >= 0) { $("#coSlider").value = i; showColony(i); } }
+}
+let coToken = 0;
+async function showColony(i) {
+  const x = coList[i]; if (!x) return;
+  S.sel.colonySnap = x;
+  $("#coWhen").textContent = `${day(x.d)} · ${x.reason} snapshot · ${i + 1} / ${coList.length}`;
+  const tok = ++coToken;
+  let r; try { r = await loadFull(x); } catch (e) { $("#coBody").innerHTML = `<div class="card">Could not read snapshot: ${esc(e.message)}</div>`; return; }
+  if (tok !== coToken) return;
+  const c = r.colonists || {}, f = r.fragility || {}, b = r.base || {}, p = r.pressure || {}, d = r.defense || {}, w = r.wealth || {}, st = r.storyteller || {}, th = r.threat || {};
+  const stat = (k, v, s = "") => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  const people = r.colonist_details || [];
+  const skillCell = v => { if (v == null) return '<span class="skill">·</span>'; if (v < 0) return '<span class="skill" style="color:var(--muted)">—</span>'; const a = Math.min(1, v / 20); return `<span class="skill" style="background:rgba(47,111,222,${0.08 + a * 0.7});color:${a > .55 ? "#fff" : "inherit"}">${v}</span>`; };
+  const res = Object.entries(r.resources?.counted || {}).sort((a2, b2) => b2[1] - a2[1]).slice(0, 18);
+  $("#coBody").innerHTML = `
+    <div class="card"><div class="stats">
+      ${stat("Colonists", fmt(c.count), `${fmt(f.able_adults)} able · ${fmt(f.dependents)} dependent · ${fmt(c.downed)} downed`)}
+      ${stat("Mood", pct(c.mood_avg), `min ${pct(c.mood_min)} · margin ${fmt(f.min_mood_margin, 2)}`)}
+      ${stat("Below break", `${fmt(f.below_minor_break)} / ${fmt(f.below_major_break)} / ${fmt(f.below_extreme_break)}`, "minor / major / extreme")}
+      ${stat("Health", pct(c.health_avg), `min ${pct(c.health_min)} · ${fmt(c.need_tending)} need tending`)}
+      ${stat("Wealth", fmt(w.total), `items ${fmt(w.items)} · buildings ${fmt(w.buildings)}`)}
+      ${stat("Raid points now", fmt(th.default_points), `adaptation ×${fmt(st.adapt_points_factor, 2)} · ${esc(th.danger_rating || "")}`)}
+      ${stat("Food", isNum(p.food_days) ? p.food_days.toFixed(1) + " d" : "–", `${fmt(p.sick_colonists)} sick · power ${fmt(p.power_net_watts)} W`)}
+      ${stat("Defense", `${fmt(d.turrets)} turrets`, `${fmt(d.traps)} traps · ${fmt(b.walls)} walls · ${fmt(b.doors)} doors`)}
+      ${stat("Base", pct(b.home_roofed_share) + " roofed", `${pct(b.home_open_to_edge_share)} open to edge · ${pct(f.flammable_building_share)} flammable`)}
+      ${stat("Doctors", fmt(f.able_doctors), "able, medicine ≥ 6")}
+    </div></div>
+    <div class="card"><h2>Colonists</h2><div class="tablewrap" id="coPeople"></div>
+      <div class="hint" style="margin-top:6px">Skills: ${SKILLS.map(s => s.slice(0, 3)).join(" · ")}. "—" = incapable.</div></div>
+    <div class="grid g2">
+      <div class="card"><h2>Positions</h2><div id="coMap" class="plot"></div><div class="hint">Colonists (filled = drafted, hollow = not able), camera view, centre of fires in the base, centre of hostiles.</div></div>
+      <div class="card"><h2>Stockpiles</h2>${res.length ? `<div class="tablewrap" style="max-height:330px"><table class="t"><tbody>${res.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${fmt(v)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="hint">–</p>'}
+        <h3>Environment</h3>${kv({ Biome: esc(r.env?.biome), Season: esc(r.env?.season), Temperature: fmt(r.env?.outdoor_temp, 1) + " °C", Weather: esc(r.env?.weather), Conditions: esc((r.env?.conditions || []).join(", ") || "none"), Rain: fmt(f.rain_rate, 2) })}
+      </div>
+    </div>`;
+  table($("#coPeople"), [
+    { key: "id", label: "Id", num: true },
+    { key: "age", label: "Age", num: true, fmt: v => fmt(v, 0) },
+    { key: "stage", label: "Stage", val: q => q.stage || "" },
+    { key: "health", label: "Health", num: true, fmt: v => pct(v) },
+    { key: "mood", label: "Mood", num: true, fmt: v => pct(v) },
+    { key: "moving", label: "Moving", num: true, fmt: v => pct(v) },
+    { key: "consciousness", label: "Conscious.", num: true, fmt: v => pct(v) },
+    { key: "weapon", label: "Weapon", val: q => (q.weapon || "").replace(/^(Gun_|MeleeWeapon_)/, "") },
+    { key: "armor_sharp", label: "Armor", num: true, fmt: v => pct(v) },
+    { key: "skills", label: "Skills", val: q => q.skills?.Shooting ?? null, html: q => SKILLS.map(s => skillCell(q.skills?.[s])).join("") },
+    { key: "dis", label: "Conditions", val: q => (q.diseases || []).filter(x => !x.chronic).length, html: q => (q.diseases || []).map(x => `<span class="pill" title="severity ${pct(x.severity)}${x.immunity != null ? ", immunity " + pct(x.immunity) : ""}">${esc(x.def)} ${pct(x.severity)}${x.chronic ? " (chronic)" : ""}</span>`).join(""), wrap: true },
+    { key: "traits", label: "Traits", val: q => (q.traits || []).join(", "), wrap: true },
+  ], people, { sort: "age", dir: -1, onClick: q => openPanel("Colonist " + q.id, rawJson(q, true)) });
+  const pos = r.positions;
+  if (pos && pos.colonists) {
+    const T = plotTheme(), ax = T._ax, data = [], shapes = [];
+    const cs = pos.colonists;
+    data.push({ type: "scatter", mode: "markers+text", x: cs.map(q => q.x), y: cs.map(q => q.z), text: cs.map(q => String(q.id).slice(-3)), textposition: "top center", textfont: { size: 9, color: css("--muted") }, hovertemplate: "colonist %{text}<extra></extra>",
+      marker: { size: 11, symbol: cs.map(q => q.able ? "circle" : "circle-open"), color: cs.map(q => q.drafted ? "#e5484d" : "#2f6fde"), line: { width: 2, color: cs.map(q => q.drafted ? "#e5484d" : "#2f6fde") } } });
+    if (pos.home_fire_centroid) data.push({ type: "scatter", mode: "markers", x: [pos.home_fire_centroid[0]], y: [pos.home_fire_centroid[1]], marker: { size: 22, color: "#f76b15", symbol: "star" }, hovertemplate: "fires (centre)<extra></extra>" });
+    if (pos.hostile_centroid) data.push({ type: "scatter", mode: "markers", x: [pos.hostile_centroid[0]], y: [pos.hostile_centroid[1]], marker: { size: 18, color: "#b42318", symbol: "x" }, hovertemplate: "hostiles (centre)<extra></extra>" });
+    if (pos.camera) {
+      const [cx, cz] = pos.camera, [vw, vh] = pos.view_size || [0, 0];
+      shapes.push({ type: "rect", x0: cx - vw / 2, x1: cx + vw / 2, y0: cz - vh / 2, y1: cz + vh / 2, line: { color: css("--muted"), dash: "dot", width: 1 } });
+      data.push({ type: "scatter", mode: "markers", x: [cx], y: [cz], marker: { size: 8, symbol: "cross-thin", line: { width: 2, color: css("--muted") } }, hovertemplate: "camera<extra></extra>" });
+    }
+    plot($("#coMap"), data, Object.assign(T, { height: 360, shapes, xaxis: Object.assign({}, ax, { title: { text: "x" } }), yaxis: Object.assign({}, ax, { title: { text: "z" }, scaleanchor: "x" }) }));
+  } else $("#coMap").innerHTML = '<p class="hint">No position data in this snapshot (older schema).</p>';
+}
+
+// ---------------------------------------------------------------- event log
+
+function renderLog() {
+  const recs = S.M.recs.filter(onMap);
+  const types = {}; for (const r of recs) types[r.type] = (types[r.type] || 0) + 1;
+  const on = S.sel.logTypes || (S.sel.logTypes = new Set(Object.keys(types).filter(t => !["candidates", "incident_rejected"].includes(t))));
+  const box = $("#lgTypes");
+  box.innerHTML = Object.entries(types).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<span class="pill ${on.has(t) ? "" : "off"}" data-t="${esc(t)}">${esc(t.replace(/_/g, " "))} ${n}</span>`).join("");
+  box.querySelectorAll(".pill").forEach(el => el.onclick = () => { const t = el.dataset.t; on.has(t) ? on.delete(t) : on.add(t); el.classList.toggle("off"); draw(); });
+  const cols = [
+    { key: "day", label: "Day", num: true, val: r => r.day, fmt: v => fmt(v, 2) },
+    { key: "type", label: "Type", val: r => r.type.replace(/_/g, " ") },
+    { key: "what", label: "What", val: r => describe(r), wrap: true },
+    { key: "map", label: "Map", num: true, val: r => r.map ?? null },
+  ];
+  const draw = () => {
+    const q = $("#lgSearch").value.trim().toLowerCase();
+    const rows = recs.filter(r => on.has(r.type) && (!q || JSON.stringify(r).toLowerCase().includes(q)));
+    $("#lgCount").textContent = `${rows.length} records`;
+    table($("#lgTable"), cols, rows, { sort: "day", dir: -1, max: 2000, onClick: r => openRecord(r) });
+  };
+  $("#lgSearch").oninput = draw; draw();
+}
+
+// ---------------------------------------------------------------- wiring
+
+function switchTab(tab) {
+  S.tab = tab;
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + tab));
+  renderTab(tab);
+  if (typeof Plotly !== "undefined") document.querySelectorAll(`#tab-${tab} .js-plotly-plot`).forEach(p => Plotly.Plots.resize(p));
+}
+$("#tabs").onclick = e => { const b = e.target.closest("button"); if (b) switchTab(b.dataset.tab); };
+$("#selRun").onchange = e => selectRun(e.target.value);
+$("#selView").onchange = e => selectView(+e.target.value);
+$("#selMap").onchange = e => { S.map = +e.target.value; S.sel = {}; renderAll(); };
+$("#inClose").onclick = closePanel;
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePanel(); });
+for (const id of ["#btnFiles", "#btnFiles2"]) $(id).onclick = () => $("#inFiles").click();
+for (const id of ["#btnFolder", "#btnFolder2"]) $(id).onclick = () => $("#inFolder").click();
+$("#inFiles").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+$("#inFolder").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  if (S.M) renderAll();
+}
+try { const t = localStorage.getItem("tv-theme"); if (t) document.documentElement.dataset.theme = t; } catch { }
+$("#btnTheme").onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  try { localStorage.setItem("tv-theme", next); } catch { }
+  applyTheme(next);
+};
+
+// keep the timeline readout just under the sticky top bar
+new ResizeObserver(() => document.documentElement.style.setProperty("--topbar-h", $("#topbar").offsetHeight + "px")).observe($("#topbar"));
+
+// drag & drop, including whole folders
+async function entriesToFiles(items) {
+  const out = [];
+  const walk = async entry => {
+    if (entry.isFile) { out.push(await new Promise((res, rej) => entry.file(res, rej))); return; }
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      do { batch = await new Promise((res, rej) => reader.readEntries(res, rej)); for (const e of batch) await walk(e); } while (batch.length);
+    }
+  };
+  for (const it of items) { const e = it.webkitGetAsEntry && it.webkitGetAsEntry(); if (e) await walk(e); else if (it.getAsFile()) out.push(it.getAsFile()); }
+  return out;
+}
+let dragDepth = 0;
+window.addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; document.body.classList.add("dragging"); } });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", async e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  const items = [...(e.dataTransfer?.items || [])];
+  const files = items.length && items[0].webkitGetAsEntry ? await entriesToFiles(items) : [...(e.dataTransfer?.files || [])];
+  addFiles(files);
+});
+
+// ?src=url1,url2 loads files over http (handy when the viewer is served from a local web server)
+(async () => {
+  const src = new URLSearchParams(location.search).get("src");
+  if (!src) return;
+  const files = [];
+  for (const u of src.split(",").map(s => s.trim()).filter(Boolean)) {
+    try { const res = await fetch(u); if (!res.ok) throw new Error(res.status); const b = await res.blob(); files.push(new File([b], decodeURIComponent(u.split("/").pop()), { lastModified: Date.now() })); }
+    catch (e) { toast("Could not fetch " + u + ": " + e.message); }
+  }
+  if (files.length) addFiles(files);
+})();
+</script>
+</body>
+</html>
